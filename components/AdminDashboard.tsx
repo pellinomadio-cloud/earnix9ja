@@ -24,19 +24,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     }
   }, [isAuthenticated]);
 
-  const loadUsers = () => {
-    const existingUsersStr = localStorage.getItem('earnix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    setUsers(Object.values(existingUsers));
+  const loadUsers = async () => {
+    try {
+      const response = await fetch('/api/admin/users', {
+        headers: {
+          'x-admin-password': password
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === 'MAVELL999') {
-        setIsAuthenticated(true);
-        setError('');
-    } else {
-        setError('Invalid admin password');
+  const updateUserOnServer = async (email: string, updates: Partial<User>) => {
+    try {
+      const response = await fetch('/api/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, updates })
+      });
+      if (response.ok) {
+        loadUsers();
+      }
+    } catch (err) {
+      console.error('Failed to update user:', err);
     }
   };
 
@@ -48,104 +63,76 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     
     const expiryTimestamp = Date.now() + (durationDays * 24 * 60 * 60 * 1000);
 
-    const existingUsersStr = localStorage.getItem('earnix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    
-    if (existingUsers[email.toLowerCase()]) {
-        existingUsers[email.toLowerCase()].isSubscribed = true;
-        existingUsers[email.toLowerCase()].subscriptionPlan = plan;
-        existingUsers[email.toLowerCase()].subscriptionExpiryDate = expiryTimestamp;
-        
-        localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-        setUsers(Object.values(existingUsers));
-        alert(`Subscription approved for ${existingUsers[email.toLowerCase()].name} with ${plan}.`);
-    }
+    updateUserOnServer(email, {
+      isSubscribed: true,
+      subscriptionPlan: plan,
+      subscriptionExpiryDate: expiryTimestamp
+    });
+    alert(`Subscription approved for ${email} with ${plan}.`);
   };
 
   const handleRevoke = (email: string) => {
     if (!confirm('Are you sure?')) return;
-    const existingUsersStr = localStorage.getItem('earnix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    if (existingUsers[email.toLowerCase()]) {
-        existingUsers[email.toLowerCase()].isSubscribed = false;
-        existingUsers[email.toLowerCase()].subscriptionPlan = undefined;
-        existingUsers[email.toLowerCase()].subscriptionExpiryDate = undefined;
-        localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-        setUsers(Object.values(existingUsers));
-    }
+    updateUserOnServer(email, {
+      isSubscribed: false,
+      subscriptionPlan: undefined,
+      subscriptionExpiryDate: undefined
+    });
   };
 
   const handleToggleVIP = (email: string) => {
-    const existingUsersStr = localStorage.getItem('earnix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    if (existingUsers[email.toLowerCase()]) {
-        const isNowVIP = !existingUsers[email.toLowerCase()].isVIP;
-        existingUsers[email.toLowerCase()].isVIP = isNowVIP;
-        if (isNowVIP) {
-            existingUsers[email.toLowerCase()].vipBalance = 2000000;
-        } else {
-            existingUsers[email.toLowerCase()].vipBalance = 0;
-        }
-        localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-        setUsers(Object.values(existingUsers));
+    const user = users.find(u => u.email === email);
+    if (user) {
+      const isNowVIP = !user.isVIP;
+      updateUserOnServer(email, {
+        isVIP: isNowVIP,
+        vipBalance: isNowVIP ? 2000000 : 0
+      });
     }
   };
 
   const handleToggleVMode = (email: string) => {
-    const existingUsersStr = localStorage.getItem('earnix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    
-    if (existingUsers[email.toLowerCase()]) {
-        const currentVMode = !!existingUsers[email.toLowerCase()].isVMode;
-        existingUsers[email.toLowerCase()].isVMode = !currentVMode;
-        
-        localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-        setUsers(Object.values(existingUsers));
-        alert(`V Mode ${!currentVMode ? 'ACTIVATED' : 'DEACTIVATED'} for ${email}. Subscriptions will now ${!currentVMode ? 'be AUTOMATICALLY VERIFIED' : 'fail verification'}.`);
+    const user = users.find(u => u.email === email);
+    if (user) {
+      const currentVMode = !!user.isVMode;
+      updateUserOnServer(email, {
+        isVMode: !currentVMode
+      });
+      alert(`V Mode ${!currentVMode ? 'ACTIVATED' : 'DEACTIVATED'} for ${email}. Subscriptions will now ${!currentVMode ? 'be AUTOMATICALLY VERIFIED' : 'fail verification'}.`);
     }
   };
 
   const handleTogglePMode = (email: string) => {
-    const existingUsersStr = localStorage.getItem('earnix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    
-    if (existingUsers[email.toLowerCase()]) {
-        const currentPMode = !!existingUsers[email.toLowerCase()].isPMode;
-        existingUsers[email.toLowerCase()].isPMode = !currentPMode;
-        
-        localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-        setUsers(Object.values(existingUsers));
-        alert(`P Mode ${!currentPMode ? 'ACTIVATED' : 'DEACTIVATED'} for ${email}. Transactions will now ${!currentPMode ? 'show as PENDING' : 'be SUCCESSFUL'}.`);
+    const user = users.find(u => u.email === email);
+    if (user) {
+      const currentPMode = !!user.isPMode;
+      updateUserOnServer(email, {
+        isPMode: !currentPMode
+      });
+      alert(`P Mode ${!currentPMode ? 'ACTIVATED' : 'DEACTIVATED'} for ${email}. Transactions will now ${!currentPMode ? 'show as PENDING' : 'be SUCCESSFUL'}.`);
     }
   };
 
   const handleToggleDeactivate = (email: string, currentDeactivationDate?: number) => {
-    const existingUsersStr = localStorage.getItem('earnix9ja_users');
-    const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-    if (existingUsers[email.toLowerCase()]) {
-        if (currentDeactivationDate) {
-            existingUsers[email.toLowerCase()].deactivationDate = undefined;
-        } else {
-            existingUsers[email.toLowerCase()].deactivationDate = Date.now() + 1800000;
-        }
-        localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-        setUsers(Object.values(existingUsers));
+    if (currentDeactivationDate) {
+      updateUserOnServer(email, { deactivationDate: undefined });
+    } else {
+      updateUserOnServer(email, { deactivationDate: Date.now() + 1800000 });
     }
   };
 
   const handleTriggerImminent = (email: string) => {
-      const existingUsersStr = localStorage.getItem('earnix9ja_users');
-      const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-      if (existingUsers[email.toLowerCase()]) {
-          if (existingUsers[email.toLowerCase()].imminentDeactivationExpiry) {
-              existingUsers[email.toLowerCase()].imminentDeactivationExpiry = undefined;
-          } else {
-              existingUsers[email.toLowerCase()].imminentDeactivationExpiry = Date.now() + 20 * 60 * 1000; 
-              existingUsers[email.toLowerCase()].deactivationDate = undefined; 
-          }
-          localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-          setUsers(Object.values(existingUsers));
+    const user = users.find(u => u.email === email);
+    if (user) {
+      if (user.imminentDeactivationExpiry) {
+        updateUserOnServer(email, { imminentDeactivationExpiry: undefined });
+      } else {
+        updateUserOnServer(email, { 
+          imminentDeactivationExpiry: Date.now() + 20 * 60 * 1000,
+          deactivationDate: undefined 
+        });
       }
+    }
   };
 
   const getDeactivationStatus = (user: User) => {

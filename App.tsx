@@ -464,10 +464,15 @@ const App: React.FC = () => {
       const response = await fetch(`/api/user/${email}`);
       if (response.ok) {
         const userData = await response.json();
-        setUser(userData);
-        localStorage.setItem('earnix9ja_active_session', email.toLowerCase());
-        setCurrentView('dashboard');
-        alert("Account restored successfully!");
+        // Verify the sync code (which is the referral code)
+        if (userData.referralCode === syncCode) {
+          setUser(userData);
+          localStorage.setItem('earnix9ja_active_session', email.toLowerCase());
+          setCurrentView('dashboard');
+          alert("Account restored successfully!");
+        } else {
+          alert("Invalid sync code for this account.");
+        }
       } else {
         alert("Account not found on server.");
       }

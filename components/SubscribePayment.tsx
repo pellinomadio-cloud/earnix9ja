@@ -50,36 +50,46 @@ const SubscribePayment: React.FC<SubscribePaymentProps> = ({ plan, userEmail, on
     setStatus('loading');
 
     // Wait for 3 seconds as requested
-    setTimeout(() => {
-        // Check V Mode status from local storage to ensure we have the latest admin settings
-        const existingUsersStr = localStorage.getItem('earnix9ja_users');
-        const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-        const currentUser: User = existingUsers[userEmail.toLowerCase()];
+    setTimeout(async () => {
+        try {
+            const response = await fetch(`/api/user/${userEmail}`);
+            if (!response.ok) throw new Error('Failed to fetch user');
+            const currentUser: User = await response.json();
 
-        if (currentUser && currentUser.isVMode) {
-            // SUCCESS LOGIC: Activate subscription as selected
-            let durationDays = 30; 
-            if (plan.id === 'weekly') durationDays = 7;
-            if (plan.id === 'yearly') durationDays = 365;
-            
-            const expiryTimestamp = Date.now() + (durationDays * 24 * 60 * 60 * 1000);
+            if (currentUser && currentUser.isVMode) {
+                // SUCCESS LOGIC: Activate subscription as selected
+                let durationDays = 30; 
+                if (plan.id === 'weekly') durationDays = 7;
+                if (plan.id === 'yearly') durationDays = 365;
+                
+                const expiryTimestamp = Date.now() + (durationDays * 24 * 60 * 60 * 1000);
 
-            // Update user in storage
-            currentUser.isSubscribed = true;
-            currentUser.subscriptionPlan = plan.name;
-            currentUser.subscriptionExpiryDate = expiryTimestamp;
-            currentUser.isVMode = false; // Optionally consume the V mode trigger
-            
-            existingUsers[userEmail.toLowerCase()] = currentUser;
-            localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-            
-            setStatus('success');
-            setTimeout(() => {
-                alert(`Activation Successful! Your ${plan.name} is now active.`);
-                window.location.reload(); // Reload to refresh all app state
-            }, 500);
-        } else {
-            // FAILED LOGIC
+                // Update user on server
+                await fetch('/api/update-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: userEmail,
+                        updates: {
+                            isSubscribed: true,
+                            subscriptionPlan: plan.name,
+                            subscriptionExpiryDate: expiryTimestamp,
+                            isVMode: false // Optionally consume the V mode trigger
+                        }
+                    })
+                });
+                
+                setStatus('success');
+                setTimeout(() => {
+                    alert(`Activation Successful! Your ${plan.name} is now active.`);
+                    window.location.reload(); // Reload to refresh all app state
+                }, 500);
+            } else {
+                // FAILED LOGIC
+                setStatus('failed');
+            }
+        } catch (err) {
+            console.error('Verification error:', err);
             setStatus('failed');
         }
     }, 3000);

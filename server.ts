@@ -11,11 +11,17 @@ const DATA_FILE = path.join(__dirname, 'data.json');
 
 // Helper to read/write data
 const readData = () => {
-    if (!fs.existsSync(DATA_FILE)) {
+    try {
+        if (!fs.existsSync(DATA_FILE)) {
+            return { users: {} };
+        }
+        const content = fs.readFileSync(DATA_FILE, 'utf-8');
+        if (!content.trim()) return { users: {} };
+        return JSON.parse(content);
+    } catch (e) {
+        console.error("Error reading data file", e);
         return { users: {} };
     }
-    const content = fs.readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(content);
 };
 
 const writeData = (data: any) => {
@@ -146,6 +152,17 @@ async function startServer() {
         res.json(user);
     });
 
+    // Get all users (Admin only)
+    app.get('/api/admin/users', (req, res) => {
+        const password = req.headers['x-admin-password'];
+        if (password !== 'MAVELL999') {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const data = readData();
+        res.json(Object.values(data.users));
+    });
+
     app.post('/api/update-user', (req, res) => {
         const { email, updates } = req.body;
         const data = readData();
@@ -178,7 +195,7 @@ async function startServer() {
     } else {
         const distPath = path.join(process.cwd(), 'dist');
         app.use(express.static(distPath));
-        app.get('*', (req, res) => {
+        app.get('*all', (req, res) => {
             res.sendFile(path.join(distPath, 'index.html'));
         });
     }

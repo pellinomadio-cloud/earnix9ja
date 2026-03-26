@@ -49,27 +49,38 @@ const UpgradePayment: React.FC<UpgradePaymentProps> = ({ userEmail, onPaymentCom
     setStatus('loading');
 
     // Wait for 3 seconds
-    setTimeout(() => {
-        const existingUsersStr = localStorage.getItem('earnix9ja_users');
-        const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-        const currentUser: User = existingUsers[userEmail.toLowerCase()];
+    setTimeout(async () => {
+        try {
+            const response = await fetch(`/api/user/${userEmail}`);
+            if (!response.ok) throw new Error('Failed to fetch user');
+            const currentUser: User = await response.json();
 
-        if (currentUser && currentUser.isVMode) {
-            // SUCCESS LOGIC: Activate VIP
-            currentUser.isVIP = true;
-            currentUser.vipBalance = 1000000; // 1 Million VIP Business Fund
-            currentUser.isVMode = false;
-            
-            existingUsers[userEmail.toLowerCase()] = currentUser;
-            localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-            
-            setStatus('success');
-            setTimeout(() => {
-                alert(`VIP Activation Successful! You are now a Lifetime VIP Member.`);
-                window.location.reload();
-            }, 500);
-        } else {
-            // FAILED LOGIC
+            if (currentUser && currentUser.isVMode) {
+                // SUCCESS LOGIC: Activate VIP
+                await fetch('/api/update-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: userEmail,
+                        updates: {
+                            isVIP: true,
+                            vipBalance: 1000000, // 1 Million VIP Business Fund
+                            isVMode: false
+                        }
+                    })
+                });
+                
+                setStatus('success');
+                setTimeout(() => {
+                    alert(`VIP Activation Successful! You are now a Lifetime VIP Member.`);
+                    window.location.reload();
+                }, 500);
+            } else {
+                // FAILED LOGIC
+                setStatus('failed');
+            }
+        } catch (err) {
+            console.error('Verification error:', err);
             setStatus('failed');
         }
     }, 3000);
