@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gold: #FFD700;
+  --color-gold-light: #FFF380;
+  --color-gold-dark: #B8860B;
+  
+  --shadow-gold: 0 0 15px rgba(255, 215, 0, 0.4);
+  --shadow-gold-lg: 0 0 25px rgba(255, 215, 0, 0.6);
+  
+  --drop-shadow-gold: 0 0 8px rgba(255, 215, 0, 0.5);
+  
+  --animate-gold-pulse: gold-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  
+  @keyframes gold-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .8; transform: scale(1.02); filter: brightness(1.2); }
+  }
+}
+
+@layer utilities {
+  .glow-gold {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+  
+  .glow-gold-lg {
+    box-shadow: 0 0 35px rgba(255, 215, 0, 0.7);
+  }
+
+  .text-glow-gold {
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+  }
+
+  .animate-gold-shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.3), transparent);
+    background-size: 200% 100%;
+    animation: gold-shimmer 3s infinite linear;
+  }
+}
+
+@keyframes gold-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Override some default styles for a more "premium" feel */
+.bg-gold {
+  background-color: #FFD700;
+  background-image: linear-gradient(135deg, #FFD700 0%, #FFEC8B 50%, #B8860B 100%);
+}
+
+.text-gold {
+  color: #FFD700;
+  filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.3));
+}
