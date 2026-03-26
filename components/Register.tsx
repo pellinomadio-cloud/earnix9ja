@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Icons } from './Icons';
 
 interface RegisterProps {
-  onRegister: (name: string, email: string, referralCode?: string) => void;
+  onRegister: (name: string, email: string, password: string, referralCode?: string) => void;
   onSwitchToLogin: () => void;
 }
 
@@ -34,7 +34,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
     
     // Simulate API call
     setTimeout(() => {
-      onRegister(name, email, referralCode);
+      onRegister(name, email, password, referralCode);
       setIsLoading(false);
     }, 1000);
   };

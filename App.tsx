@@ -55,74 +55,43 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Helper to get stored users safely
-  const getStoredUsers = () => {
-    try {
-        const stored = localStorage.getItem('earnix9ja_users');
-        return stored ? JSON.parse(stored) : {};
-    } catch (e) {
-        return {};
-    }
-  };
-
   // Initialize User State from LocalStorage (Persistence)
-  const [user, setUser] = useState<User | null>(() => {
-    try {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
         const activeEmail = localStorage.getItem('earnix9ja_active_session');
         if (activeEmail) {
-            const users = getStoredUsers();
-            const storedUser = users[activeEmail.toLowerCase()];
-            if (storedUser) {
-                // Migration: Ensure transactions array exists
-                if (!storedUser.transactions) {
-                    storedUser.transactions = [{
-                        id: 'trx-init',
-                        type: 'credit',
-                        amount: 10000,
-                        description: 'Welcome Bonus',
-                        date: new Date().toISOString(),
-                        status: 'success'
-                    }];
-                }
-                // Migration: Ensure rewardStatus exists
-                if (!storedUser.rewardStatus) {
-                    storedUser.rewardStatus = {
-                        currentDay: 1,
-                        lastClaimedTimestamp: 0
-                    };
-                }
-                // Migration: Ensure notificationPreferences exists
-                if (!storedUser.notificationPreferences) {
-                    storedUser.notificationPreferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
-                }
-                // Migration: Ensure referral fields exist
-                if (!storedUser.referralCode) {
-                    const prefix = "EX";
-                    const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
-                    const emailPart = storedUser.email.substring(0, 2).toUpperCase();
-                    storedUser.referralCode = `${prefix}-${emailPart}${randomPart}-${Math.floor(1000 + Math.random() * 9000)}`;
-                }
-                if (storedUser.freeWithdrawals === undefined) {
-                    storedUser.freeWithdrawals = 0;
-                }
-                // Save migrations immediately
-                users[activeEmail.toLowerCase()] = storedUser;
-                localStorage.setItem('earnix9ja_users', JSON.stringify(users));
-                
-                return storedUser;
-            }
+          const response = await fetch(`/api/user/${activeEmail}`);
+          if (response.ok) {
+            const userData = await response.json();
+            setUser(userData);
+          } else {
+            localStorage.removeItem('earnix9ja_active_session');
+          }
         }
-    } catch (e) {
+      } catch (e) {
         console.error("Error restoring session", e);
-    }
-    return null;
-  });
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+    fetchUser();
+  }, []);
 
-  // Helper to save user to local storage
-  const saveUserToStorage = (u: User) => {
-    const existingUsers = getStoredUsers();
-    existingUsers[u.email.toLowerCase()] = u;
-    localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
+  // Helper to save user to backend
+  const saveUserToBackend = async (u: User) => {
+    try {
+      await fetch('/api/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: u.email, updates: u })
+      });
+    } catch (e) {
+      console.error("Error saving user to backend", e);
+    }
   };
 
   // Check Subscription Expiry
@@ -136,7 +105,7 @@ const App: React.FC = () => {
                 subscriptionExpiryDate: undefined 
             };
             setUser(updatedUser);
-            saveUserToStorage(updatedUser);
+            saveUserToBackend(updatedUser);
         }
     }
   }, [now, user]);
@@ -162,7 +131,7 @@ const App: React.FC = () => {
                 transactions: [newTransaction, ...(user.transactions || [])]
             };
             setUser(updatedUser);
-            saveUserToStorage(updatedUser);
+            saveUserToBackend(updatedUser);
             alert(`Loan Repayment Successful: ₦${amountToRepay.toLocaleString()} has been debited from your balance.`);
         }
     }
@@ -178,7 +147,7 @@ const App: React.FC = () => {
                 deactivationDate: now - 1000 
             };
             setUser(updatedUser);
-            saveUserToStorage(updatedUser);
+            saveUserToBackend(updatedUser);
         }
     }
   }, [now, user]);
@@ -188,12 +157,8 @@ const App: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<'login' | 'register' | 'dashboard'>(() => {
       const activeEmail = localStorage.getItem('earnix9ja_active_session');
-      const users = getStoredUsers();
-      if (activeEmail && users[activeEmail.toLowerCase()]) {
+      if (activeEmail) {
           return 'dashboard';
-      }
-      if (Object.keys(users).length > 0) {
-          return 'login';
       }
       return 'register';
   });
@@ -219,11 +184,6 @@ const App: React.FC = () => {
     } else if (activeTab === 'send_money' || activeTab === 'sync_account' || activeTab === 'buy_service' || activeTab === 'transaction_history' || activeTab === 'invite_earn' || activeTab === 'reward' || activeTab === 'imminent_payment' || activeTab === 'referral_dashboard' || activeTab === 'upgrade_proposal' || activeTab === 'business_hub' || activeTab === 'notifications' || activeTab === 'me' || activeTab === 'finance' || activeTab === 'loan') {
         setActiveTab('home');
     } else if (activeTab === 'admin') {
-        const existingUsers = getStoredUsers();
-        if (user) {
-          const updatedUser = existingUsers[user.email.toLowerCase()];
-          if (updatedUser) setUser(updatedUser);
-        }
         setActiveTab('home');
     } else {
         setActiveTab('home');
@@ -261,140 +221,60 @@ const App: React.FC = () => {
     return `${prefix}-${emailPart}${randomPart}-${Math.floor(1000 + Math.random() * 9000)}`;
   };
 
-  const handleRegister = (name: string, email: string, referralCodeInput?: string) => {
-    const existingUsers = getStoredUsers();
-    
-    // Check if user already exists
-    if (existingUsers[email.toLowerCase()]) {
-        alert("An account with this email already exists.");
+  const handleRegister = async (name: string, email: string, password: string, referralCodeInput?: string) => {
+    try {
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, referralCodeInput })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        alert(err.error || "Registration failed");
         return;
+      }
+
+      const newUser = await response.json();
+      localStorage.setItem('earnix9ja_active_session', email.toLowerCase());
+      
+      setUser(newUser);
+      setCurrentView('dashboard');
+      setActiveTab('home');
+      setShowWelcomeAd(true);
+      setHasUnreadNotifications(true);
+      setTimeout(() => setShowReferralModal(true), 2000);
+    } catch (e) {
+      console.error("Registration error", e);
+      alert("An error occurred during registration.");
     }
-
-    const initialTransaction: Transaction = {
-        id: `trx-${Date.now()}`,
-        type: 'credit',
-        amount: 10000.00,
-        description: 'Welcome Bonus',
-        date: new Date().toISOString(),
-        status: 'success'
-    };
-
-    let referredBy: string | undefined = undefined;
-    
-    // Handle Referral Logic
-    if (referralCodeInput) {
-        const referrerEmail = Object.keys(existingUsers).find(
-            key => existingUsers[key].referralCode === referralCodeInput.trim().toUpperCase()
-        );
-
-        if (referrerEmail) {
-            const referrer = existingUsers[referrerEmail];
-            referrer.freeWithdrawals = (referrer.freeWithdrawals || 0) + 1;
-            
-            // Add a notification or transaction record for the referrer if needed
-            const referralBonusTrx: Transaction = {
-                id: `trx-ref-${Date.now()}`,
-                type: 'credit',
-                amount: 0, // It's a free withdrawal, not a cash bonus, but we can log it
-                description: `Referral Bonus: ${name} joined`,
-                date: new Date().toISOString(),
-                status: 'success'
-            };
-            referrer.transactions = [referralBonusTrx, ...(referrer.transactions || [])];
-            
-            existingUsers[referrerEmail] = referrer;
-            referredBy = referrerEmail;
-            console.log(`Referral successful! ${referrer.name} earned a free withdrawal.`);
-        }
-    }
-
-    const newUser: User = {
-      name, 
-      email, 
-      balance: 10000.00, 
-      isSubscribed: false,
-      transactions: [initialTransaction],
-      rewardStatus: { currentDay: 1, lastClaimedTimestamp: 0 },
-      notificationPreferences: { ...DEFAULT_NOTIFICATION_PREFERENCES },
-      referralCode: generateReferralCode(email),
-      freeWithdrawals: 0,
-      referredBy
-    };
-
-    existingUsers[email.toLowerCase()] = newUser;
-    localStorage.setItem('earnix9ja_users', JSON.stringify(existingUsers));
-    localStorage.setItem('earnix9ja_active_session', email.toLowerCase());
-    
-    setUser(newUser);
-    setCurrentView('dashboard');
-    setActiveTab('home');
-    setShowWelcomeAd(true);
-    setHasUnreadNotifications(true);
-    setTimeout(() => setShowReferralModal(true), 2000);
   };
 
-  const handleLogin = (email: string, name: string, referralCodeInput?: string) => {
-    const existingUsers = getStoredUsers();
-    const storedUser = existingUsers[email.toLowerCase()];
-    if (storedUser) {
-        if (!storedUser.transactions) {
-            storedUser.transactions = [{
-                id: 'trx-init', type: 'credit', amount: 10000,
-                description: 'Welcome Bonus', date: new Date().toISOString(), status: 'success'
-            }];
-        }
-        if (!storedUser.rewardStatus) storedUser.rewardStatus = { currentDay: 1, lastClaimedTimestamp: 0 };
-        if (!storedUser.referralCode) storedUser.referralCode = generateReferralCode(email);
-        if (storedUser.freeWithdrawals === undefined) storedUser.freeWithdrawals = 0;
+  const handleLogin = async (email: string, password: string, referralCodeInput?: string) => {
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, referralCodeInput })
+      });
 
-        // Handle Referral if not already referred
-        if (referralCodeInput && !storedUser.referredBy) {
-            const referrerEmail = Object.keys(existingUsers).find(
-                key => existingUsers[key].referralCode === referralCodeInput.trim().toUpperCase()
-            );
+      if (!response.ok) {
+        const err = await response.json();
+        alert(err.error || "Login failed");
+        return;
+      }
 
-            if (referrerEmail && referrerEmail !== email.toLowerCase()) {
-                const referrer = existingUsers[referrerEmail];
-                referrer.freeWithdrawals = (referrer.freeWithdrawals || 0) + 1;
-                
-                const referralBonusTrx: Transaction = {
-                    id: `trx-ref-login-${Date.now()}`,
-                    type: 'credit',
-                    amount: 0,
-                    description: `Referral Bonus: ${storedUser.name} linked account`,
-                    date: new Date().toISOString(),
-                    status: 'success'
-                };
-                referrer.transactions = [referralBonusTrx, ...(referrer.transactions || [])];
-                
-                existingUsers[referrerEmail] = referrer;
-                storedUser.referredBy = referrerEmail;
-                console.log(`Referral linked successfully on login!`);
-            }
-        }
-
-        saveUserToStorage(storedUser);
-        setUser(storedUser);
-    } else {
-        const initialTransaction: Transaction = {
-            id: `trx-${Date.now()}`, type: 'credit', amount: 10000.00,
-            description: 'Welcome Bonus', date: new Date().toISOString(), status: 'success'
-        };
-        const loggedInUser: User = {
-            name: name || 'User', email, balance: 10000.00, isSubscribed: false,
-            transactions: [initialTransaction],
-            rewardStatus: { currentDay: 1, lastClaimedTimestamp: 0 },
-            notificationPreferences: { ...DEFAULT_NOTIFICATION_PREFERENCES },
-            referralCode: generateReferralCode(email),
-            freeWithdrawals: 0
-        };
-        setUser(loggedInUser);
-        saveUserToStorage(loggedInUser);
+      const loggedInUser = await response.json();
+      localStorage.setItem('earnix9ja_active_session', email.toLowerCase());
+      
+      setUser(loggedInUser);
+      setCurrentView('dashboard');
+      setActiveTab('home');
+      setHasUnreadNotifications(true);
+    } catch (e) {
+      console.error("Login error", e);
+      alert("An error occurred during login.");
     }
-    localStorage.setItem('earnix9ja_active_session', email.toLowerCase());
-    setCurrentView('dashboard');
-    setActiveTab('home');
-    setHasUnreadNotifications(true);
   };
 
   const handleLogout = () => {
@@ -408,7 +288,7 @@ const App: React.FC = () => {
     if (user) {
       const updatedUser = { ...user, ...updatedFields };
       setUser(updatedUser);
-      saveUserToStorage(updatedUser);
+      saveUserToBackend(updatedUser);
     }
   };
 
@@ -434,7 +314,7 @@ const App: React.FC = () => {
             rewardStatus: { lastClaimedTimestamp: nowTs, currentDay: nextDay }
         };
         setUser(updatedUser);
-        saveUserToStorage(updatedUser);
+        saveUserToBackend(updatedUser);
         setTimeout(() => setShowReferralModal(true), 1500);
     }
   };
@@ -451,7 +331,7 @@ const App: React.FC = () => {
             transactions: [newTransaction, ...(user.transactions || [])]
         };
         setUser(updatedUser);
-        saveUserToStorage(updatedUser);
+        saveUserToBackend(updatedUser);
         alert(`Congratulations! ₦${rewardAmount.toLocaleString()} has been added to your balance.`);
         setTimeout(() => setShowReferralModal(true), 1000);
     }
@@ -515,7 +395,7 @@ const App: React.FC = () => {
             transactions: [newTransaction, ...(user.transactions || [])]
         };
         setUser(updatedUser);
-        saveUserToStorage(updatedUser);
+        saveUserToBackend(updatedUser);
     }
   };
 
@@ -533,7 +413,7 @@ const App: React.FC = () => {
           isVIP: newVipBalance > 0
       };
       setUser(updatedUser);
-      saveUserToStorage(updatedUser);
+      saveUserToBackend(updatedUser);
     }
   };
 
@@ -558,7 +438,7 @@ const App: React.FC = () => {
           transactions: [newTransaction, ...(user.transactions || [])]
       };
       setUser(updatedUser);
-      saveUserToStorage(updatedUser);
+      saveUserToBackend(updatedUser);
       alert(`Loan Approved: ₦${amount.toLocaleString()} added to your balance. Repayment due in 1 minute.`);
     }
   };
@@ -575,17 +455,26 @@ const App: React.FC = () => {
             transactions: [newTransaction, ...(user.transactions || [])]
         };
         setUser(updatedUser);
-        saveUserToStorage(updatedUser);
+        saveUserToBackend(updatedUser);
     }
   };
   
-  const handleRestoreAccount = (restoredUser: User) => {
-    if (!restoredUser.transactions) restoredUser.transactions = [];
-    if (!restoredUser.rewardStatus) restoredUser.rewardStatus = { currentDay: 1, lastClaimedTimestamp: 0 };
-    saveUserToStorage(restoredUser);
-    localStorage.setItem('earnix9ja_active_session', restoredUser.email.toLowerCase());
-    setUser(restoredUser);
-    setTimeout(() => setActiveTab('home'), 1000);
+  const handleRestoreAccount = async (email: string, syncCode: string) => {
+    try {
+      const response = await fetch(`/api/user/${email}`);
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        localStorage.setItem('earnix9ja_active_session', email.toLowerCase());
+        setCurrentView('dashboard');
+        alert("Account restored successfully!");
+      } else {
+        alert("Account not found on server.");
+      }
+    } catch (e) {
+      console.error("Restore error", e);
+      alert("An error occurred during account restoration.");
+    }
   };
 
   useEffect(() => {
@@ -594,8 +483,21 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [currentView]);
 
-  if (currentView === 'register') return <div className={darkMode ? 'dark' : ''}><Register onRegister={handleRegister} onSwitchToLogin={() => setCurrentView('login')} /></div>;
-  if (currentView === 'login') return <div className={darkMode ? 'dark' : ''}><Login onLogin={handleLogin} onSwitchToRegister={() => setCurrentView('register')} /></div>;
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#FFD700] border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-[#FFD700] font-medium animate-pulse">Syncing with Earnix9ja...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    if (currentView === 'register') return <div className={darkMode ? 'dark' : ''}><Register onRegister={handleRegister} onSwitchToLogin={() => setCurrentView('login')} /></div>;
+    return <div className={darkMode ? 'dark' : ''}><Login onLogin={handleLogin} onSwitchToRegister={() => setCurrentView('register')} /></div>;
+  }
 
   const nowTs = Date.now();
   const twentyFourHours = 24 * 60 * 60 * 1000;

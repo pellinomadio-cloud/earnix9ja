@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Icons } from './Icons';
 
 interface LoginProps {
-  onLogin: (email: string, name: string, referralCode?: string) => void;
+  onLogin: (email: string, password: string, referralCode?: string) => void;
   onSwitchToRegister: () => void;
 }
 
@@ -33,19 +33,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToRegister }) => {
     
     // Simulate API call / Local Validation
     setTimeout(() => {
-      // Check if user exists in local storage
-      const existingUsersStr = localStorage.getItem('earnix9ja_users');
-      const existingUsers = existingUsersStr ? JSON.parse(existingUsersStr) : {};
-      const user = existingUsers[email.toLowerCase()];
-
-      if (user) {
-        onLogin(email, user.name, referralCode);
-        setIsLoading(false);
-      } else {
-        // User not found logic
-        setError('Account not registered on this device.');
-        setIsLoading(false);
-      }
+      onLogin(email, password, referralCode);
+      setIsLoading(false);
     }, 1000);
   };
 

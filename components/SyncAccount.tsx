@@ -5,43 +5,19 @@ import { User } from '../types';
 
 interface SyncAccountProps {
   user: User;
-  onRestore: (user: User) => void;
+  onRestore: (email: string, syncCode: string) => void;
 }
 
 const SyncAccount: React.FC<SyncAccountProps> = ({ user, onRestore }) => {
+  const [restoreEmail, setRestoreEmail] = useState('');
   const [restoreCode, setRestoreCode] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
   const [copied, setCopied] = useState(false);
   
-  // Timestamp state to control code generation time
-  const [codeTimestamp, setCodeTimestamp] = useState(Date.now());
-
-  // Refresh timestamp every 5 minutes to generate new code
-  useEffect(() => {
-    const interval = setInterval(() => {
-        setCodeTimestamp(Date.now());
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Generate Sync Code: Base64 encode the payload { t: timestamp, d: user }
-  const generateSyncCode = () => {
-    try {
-      const payload = {
-        t: codeTimestamp,
-        d: user
-      };
-      const jsonString = JSON.stringify(payload);
-      return btoa(jsonString);
-    } catch (e) {
-      return "Error generating code";
-    }
-  };
-
-  const syncCode = generateSyncCode();
+  // The sync code is now just the user's referral code for simplicity in this demo
+  const syncCode = user.referralCode;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(syncCode);
@@ -54,57 +30,12 @@ const SyncAccount: React.FC<SyncAccountProps> = ({ user, onRestore }) => {
     setError('');
     setSuccess('');
 
-    if (!restoreCode.trim()) {
-        setError('Please enter a sync code.');
+    if (!restoreEmail.trim() || !restoreCode.trim()) {
+        setError('Please enter both email and sync code.');
         return;
     }
 
-    try {
-        const jsonString = atob(restoreCode.trim());
-        const payload = JSON.parse(jsonString);
-        
-        let restoredUser: User | null = null;
-        let timestamp = 0;
-
-        // Check format
-        if (payload.d && payload.t) {
-            restoredUser = payload.d;
-            timestamp = payload.t;
-        } else if (payload.email) {
-            // Handle legacy format (optional, but safer to reject based on "old one will expire")
-            // For this specific request, let's treat legacy codes as expired/invalid
-            setError('This sync code format is no longer supported or invalid.');
-            return;
-        } else {
-            setError('Invalid sync code data.');
-            return;
-        }
-
-        // Check Expiration (5 minutes)
-        const now = Date.now();
-        const expirationTime = 5 * 60 * 1000; // 5 minutes in ms
-
-        if (now - timestamp > expirationTime) {
-            setError('This sync code has expired. Please generate a new one.');
-            return;
-        }
-
-        // Basic validation to check if it looks like a User object
-        if (restoredUser && restoredUser.email && restoredUser.balance !== undefined) {
-            onRestore(restoredUser);
-            setSuccess('Account restored successfully!');
-        } else {
-            setError('Invalid sync code format.');
-        }
-    } catch (e) {
-        setError('Invalid sync code. Please check and try again.');
-    }
-  };
-
-  // Calculate formatted time for display
-  const getExpirationTime = () => {
-     const expiry = new Date(codeTimestamp + 5 * 60 * 1000);
-     return expiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    onRestore(restoreEmail.trim(), restoreCode.trim());
   };
 
   return (
@@ -139,8 +70,6 @@ const SyncAccount: React.FC<SyncAccountProps> = ({ user, onRestore }) => {
                 <h3 className="font-bold text-white">Your Sync Code</h3>
                 <p className="text-xs text-gray-500">
                     Copy this code to restore your balance and data. 
-                    <br/>
-                    <span className="text-red-500 font-bold">Expires at {getExpirationTime()}</span>
                 </p>
             </div>
 
@@ -194,12 +123,37 @@ const SyncAccount: React.FC<SyncAccountProps> = ({ user, onRestore }) => {
             )}
 
             <form onSubmit={handleRestoreSubmit} className="space-y-4">
-                <textarea 
-                    value={restoreCode}
-                    onChange={(e) => setRestoreCode(e.target.value)}
-                    placeholder="Paste your sync code here..."
-                    className="w-full h-32 p-3 bg-black border border-gray-800 rounded-xl text-xs font-mono text-white resize-none focus:ring-2 focus:ring-gold outline-none"
-                />
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Account Email</label>
+                    <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
+                            <Icons.Mail size={16} />
+                        </div>
+                        <input 
+                            type="email"
+                            value={restoreEmail}
+                            onChange={(e) => setRestoreEmail(e.target.value)}
+                            placeholder="Enter your registered email"
+                            className="w-full pl-10 pr-4 py-3 bg-black border border-gray-800 rounded-xl text-sm text-white focus:ring-2 focus:ring-gold outline-none"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Sync Code</label>
+                    <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
+                            <Icons.Lock size={16} />
+                        </div>
+                        <input 
+                            type="text"
+                            value={restoreCode}
+                            onChange={(e) => setRestoreCode(e.target.value)}
+                            placeholder="Paste your sync code here"
+                            className="w-full pl-10 pr-4 py-3 bg-black border border-gray-800 rounded-xl text-sm text-white focus:ring-2 focus:ring-gold outline-none"
+                        />
+                    </div>
+                </div>
 
                 <button 
                     type="submit"
